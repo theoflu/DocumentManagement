@@ -7,5 +7,7 @@ public enum ERole {
     ROLE_Content_Creator,
     ROLE_Reviewer,
     ROLE_Reader,
+    ;
+
 
 }

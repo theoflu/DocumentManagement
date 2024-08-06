@@ -79,8 +79,7 @@ public class AuthController {
                     .body("Error: Email is already in use!");
         }
         Set<Role> roles = new HashSet<>();
-        roles.add(roleRepository.findByName(ERole.ROLE_Reader).orElseThrow(() -> new RuntimeException("Error: Role is not found.")));
-
+        roles.add(roleRepository.findByName(ERole.ROLE_Document_Manager).orElseThrow(() -> new RuntimeException("Error: Role is not found.")));
         UserEntity user = UserEntity.builder().email(signUpRequest.getEmail())
                 .username(signUpRequest.getUsername())
                 .password(encoder.encode(signUpRequest.getPassword()))

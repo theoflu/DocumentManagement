@@ -5,6 +5,9 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+
+import java.util.List;
+
 @Entity
 @Data
 @AllArgsConstructor
@@ -15,12 +18,13 @@ public class FileEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.AUTO)
     private long id;
-    @ManyToOne
-    private UserEntity userEntity;
+    @ManyToMany
+    @Column(name = "users_who_approve")
+    private List<UserEntity> userEntity;
     @Column(name = "is_Approved")
     private boolean  is_Approved;
     @Column(name = "checked_by_whom")//ONAYLAMA SIRASINA GÖRE TAMAMLANIRSA ÜSTTEKİ TRUE OLUR YOKSA FALSE
-    private ERole  checked_by_whom;
+    private ERole checked_by_whom;
     @Column(name = "files")
     private String file;
     @Column(name = "file_size")
@@ -31,4 +35,5 @@ public class FileEntity {
     private ERole  reported_by_whom;
     @ManyToOne
     private UserEntity sender;
+
 }
