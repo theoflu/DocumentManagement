@@ -277,6 +277,13 @@ public class UserController {
 
     }
 
+    @GetMapping("/find/{word}")
+    ResponseEntity<?> find(@RequestHeader("Authorization") String token, @PathVariable String word
+    ){
+       return  new ResponseEntity<>(" AHANDA BURADA : "+ userService.searchInFolder("uploads/",word,jwtUtils.getUserNameFromJwtToken(token.substring(6))),HttpStatus.OK);
+
+    }
+
 
 
 }

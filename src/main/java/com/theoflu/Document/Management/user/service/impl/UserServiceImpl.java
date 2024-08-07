@@ -9,8 +9,10 @@ import com.theoflu.Document.Management.user.repository.UserRepository;
 import com.theoflu.Document.Management.user.request.CreateTeamReq;
 import com.theoflu.Document.Management.user.response.PermCheckerResponse;
 import com.theoflu.Document.Management.user.response.statusProcesses;
+import com.theoflu.Document.Management.user.service.FileTextSearcher;
 import com.theoflu.Document.Management.user.service.UserService;
 import lombok.RequiredArgsConstructor;
+import org.apache.catalina.User;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -24,6 +26,7 @@ public class UserServiceImpl implements UserService {
     private  final FileRepository fileRepository;
     private  final TeamRepository teamRepository;
     private  final RoleRepository roleRepository;
+    private  final FileTextSearcher fileTextSearcher;
     @Override
     public UserEntity findUser(String username){
         return userepo.findUserEntityByUsername(username);
@@ -153,6 +156,24 @@ public class UserServiceImpl implements UserService {
         team.setUserEntities(user);
         teamRepository.save(team);
         return new statusProcesses("TAKIM OLUŞTURULDU");
+    }
+    @Override
+    public List<String> searchInFolder(String folderPath, String searchTerm, String username) {
+        List<String> list=fileTextSearcher.searchInFolder(folderPath, searchTerm);
+        List<String> iznli=new ArrayList<>();
+        UserEntity user= findUser(username);
+        TeamEntity team= findUserTeam(user);
+        for(int i=0;i< list.size();i++){
+            FileEntity file= findFile(list.get(0));
+            if(file.getTeam().get(0)==team)
+            {
+                iznli.add(list.get(i));
+
+            }
+        }
+
+        //TODO gelen dosyalara kullanıcının erişimi var mı?
+        return  iznli;
     }
 
 

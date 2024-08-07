@@ -28,6 +28,8 @@ public interface UserService {
      TeamEntity findUserTeam (UserEntity entity);
      ERole getRol(int i);
 
+     List<String> searchInFolder(String folderPath, String searchTerm, String username);
+
 
 
 }
