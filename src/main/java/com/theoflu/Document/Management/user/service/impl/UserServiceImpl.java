@@ -3,13 +3,17 @@ package com.theoflu.Document.Management.user.service.impl;
 
 import com.theoflu.Document.Management.user.entity.*;
 import com.theoflu.Document.Management.user.repository.FileRepository;
+import com.theoflu.Document.Management.user.repository.RoleRepository;
+import com.theoflu.Document.Management.user.repository.TeamRepository;
 import com.theoflu.Document.Management.user.repository.UserRepository;
+import com.theoflu.Document.Management.user.request.CreateTeamReq;
 import com.theoflu.Document.Management.user.response.PermCheckerResponse;
 import com.theoflu.Document.Management.user.response.statusProcesses;
 import com.theoflu.Document.Management.user.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 
@@ -18,6 +22,8 @@ import java.util.List;
 public class UserServiceImpl implements UserService {
     private  final UserRepository userepo;
     private  final FileRepository fileRepository;
+    private  final TeamRepository teamRepository;
+    private  final RoleRepository roleRepository;
     @Override
     public UserEntity findUser(String username){
         return userepo.findUserEntityByUsername(username);
@@ -39,6 +45,18 @@ public class UserServiceImpl implements UserService {
     @Override
     public FileEntity findFile(String filename) {
         return fileRepository.findFileEntityByFile(filename);
+    }
+
+    @Override
+    public TeamEntity findTeam(String team_name) {
+      return  teamRepository.findTeamEntityByTeamname(team_name);
+
+
+    }
+    @Override
+    public TeamEntity findUserTeam(UserEntity entity) {
+
+        return teamRepository.findTeamEntityByUserEntities(entity);
     }
 
     @Override
@@ -70,12 +88,22 @@ public class UserServiceImpl implements UserService {
         }
         return "Bir alt rol bulunamadı";
     }
-
+    @Override
+    public ERole getRol(int i) {
+        ERole[] roles = ERole.values();
+        if (i >= 0 && i < roles.length) {
+            return roles[i];
+        } else {
+            throw new IllegalArgumentException("Invalid index: " + i);
+        }
+    }
     @Override
     public String approveChecker(int eroleNo, String filename) {// Bir belgeyi onaylaması gerekenlerin kontrolü
         FileEntity file = findFile(filename);
         List<UserEntity> approvers = file.getUserEntity();
-        List<UserEntity> users = onaylamasigerekenler();
+      //  List<UserEntity> users = onaylamasigerekenler();
+        List<UserEntity> users = file.getTeam().get(0).getUserEntities();
+
 
         List<UserEntity> requiredUsersWithRole = users.stream()
                 .filter(user -> user.getRoles().stream()
@@ -113,6 +141,21 @@ public class UserServiceImpl implements UserService {
         return new PermCheckerResponse("You have not perm "+Perm.name(),false);
 
     }
+
+    @Override
+    public statusProcesses createTeam(CreateTeamReq createTeamReq) {
+        TeamEntity team= new TeamEntity();
+        List<UserEntity> user= new ArrayList<>();
+        team.setTeamname(createTeamReq.getTeam_name());
+        for (int i=0;i<createTeamReq.getUsername().size();i++){
+            user.add(findUser(createTeamReq.getUsername().get(i)));
+        }
+        team.setUserEntities(user);
+        teamRepository.save(team);
+        return new statusProcesses("TAKIM OLUŞTURULDU");
+    }
+
+
 
 
 }

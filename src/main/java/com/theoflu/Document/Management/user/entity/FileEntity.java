@@ -33,6 +33,8 @@ public class FileEntity {
     private String  report;
     @Column(name = "reported_by_whom")
     private ERole  reported_by_whom;
+    @ManyToMany
+    private List<TeamEntity>  team;
     @ManyToOne
     private UserEntity sender;
 

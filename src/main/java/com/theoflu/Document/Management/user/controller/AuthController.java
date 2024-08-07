@@ -6,6 +6,7 @@ import com.theoflu.Document.Management.user.repository.RoleRepository;
 
 import com.theoflu.Document.Management.user.repository.UserRepository;
 
+import com.theoflu.Document.Management.user.request.SignUpReq;
 import com.theoflu.Document.Management.user.response.JwtResponse;
 import com.theoflu.Document.Management.user.service.UserService;
 import lombok.RequiredArgsConstructor;
@@ -66,7 +67,7 @@ public class AuthController {
 
     @PostMapping("/signup")
     @Transactional
-    public ResponseEntity<?> registerUser(@RequestBody UserEntity signUpRequest) throws NoSuchAlgorithmException, InvalidKeySpecException {
+    public ResponseEntity<?> registerUser(@RequestBody SignUpReq signUpRequest) throws NoSuchAlgorithmException, InvalidKeySpecException {
         if (userRepository.existsByUsername(signUpRequest.getUsername())) {
             return ResponseEntity
                     .badRequest()
@@ -78,8 +79,9 @@ public class AuthController {
                     .badRequest()
                     .body("Error: Email is already in use!");
         }
+        ERole e= userService.getRol(signUpRequest.getRol());
         Set<Role> roles = new HashSet<>();
-        roles.add(roleRepository.findByName(ERole.ROLE_Document_Manager).orElseThrow(() -> new RuntimeException("Error: Role is not found.")));
+        roles.add(roleRepository.findByName(e).orElseThrow(() -> new RuntimeException("Error: Role is not found.")));
         UserEntity user = UserEntity.builder().email(signUpRequest.getEmail())
                 .username(signUpRequest.getUsername())
                 .password(encoder.encode(signUpRequest.getPassword()))

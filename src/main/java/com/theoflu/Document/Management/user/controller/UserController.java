@@ -4,6 +4,7 @@ import com.theoflu.Document.Management.user.FileSigner.ApiReqs;
 import com.theoflu.Document.Management.user.configs.JwtUtils;
 import com.theoflu.Document.Management.user.entity.*;
 import com.theoflu.Document.Management.user.request.ApproveReq;
+import com.theoflu.Document.Management.user.request.CreateTeamReq;
 import com.theoflu.Document.Management.user.request.ReportReq;
 import com.theoflu.Document.Management.user.request.SignReq;
 import com.theoflu.Document.Management.user.response.PermCheckerResponse;
@@ -76,9 +77,13 @@ public class UserController {
                 File dest = new File(filePath);
                 // find user
 
+
                 UserEntity user = userService.findUser(jwtUtils.getUserNameFromJwtToken(token.substring(6)));
                 List<UserEntity> list= new ArrayList<>();
                 list.add(user);
+                TeamEntity team= userService.findUserTeam(user);
+                List<TeamEntity> list1=new ArrayList<>();
+                list1.add(team);
                 // Geçici dosyayı belirli bir dizine kopyala
                 Files.copy(tempFile.toPath(), dest.toPath());
                 FileEntity fileEntity = new FileEntity();
@@ -88,6 +93,7 @@ public class UserController {
                 fileEntity.setChecked_by_whom(userService.getHighestRole(user).getName());
                 fileEntity.setUserEntity(list);
                 fileEntity.setReported_by_whom(ERole.ROLE_Reviewer);
+                fileEntity.setTeam(list1);
                 userService.saveFile(fileEntity);
 
                 return new ResponseEntity<>("Dosya başarıyla yüklendi: " + filePath, HttpStatus.OK);
@@ -145,7 +151,6 @@ public class UserController {
         String username = jwtUtils.getUserNameFromJwtToken(token.substring(6));
         FileEntity file = userService.findFile(req.getFilename());
         UserEntity user = userService.findUser(username);
-
         PermCheckerResponse permCheckerResponse = userService.PermChecker(username, ERolePerm.APPROVE);
         if (!permCheckerResponse.isVal()) {
             return new ResponseEntity<>(permCheckerResponse.getMessage(), HttpStatus.FORBIDDEN);
@@ -184,9 +189,21 @@ public class UserController {
         file.setReport("");
         file.setReported_by_whom(userService.getHighestRole(userService.findUser(username)).getName());
         // yetkili olan kullanıcılar görecek reportlu dosyayı amma sorumlu rol düzenleyebilecek
+        // reportlu dosyaları listele listelenmişlerden kullanıcıyı ilgilendirenleri listele
+        // EKİP EKLENECEK
 
     }
+    @PostMapping("/createTeam")
+    public ResponseEntity<?> createTeam(@RequestHeader("Authorization") String token,@RequestBody CreateTeamReq createTeamReq){
+        String username = jwtUtils.getUserNameFromJwtToken(token.substring(6));
+        UserEntity user = userService.findUser(username);
+        if(userService.getHighestRole(user).getId()==1){
+            userService.createTeam(createTeamReq);
+            return new ResponseEntity<>("BAŞARILI",HttpStatus.OK);
+        }
 
+        return new ResponseEntity<>("BAŞARISIZ",HttpStatus.FORBIDDEN);
+    }
     /*
     private  List<UserEntity> deneme(int erole_no, String filename){
        //e role numarası olup onaylayanda olmayan varsa approved yapma eğer yoksa approved yap ve sonrası için onaylama izini ver yavrucum
