@@ -3,18 +3,16 @@ package com.theoflu.Document.Management.user.service.impl;
 
 import com.theoflu.Document.Management.user.configs.JwtUtils;
 import com.theoflu.Document.Management.user.entity.*;
-import com.theoflu.Document.Management.user.repository.FileRepository;
-import com.theoflu.Document.Management.user.repository.RoleRepository;
-import com.theoflu.Document.Management.user.repository.TeamRepository;
-import com.theoflu.Document.Management.user.repository.UserRepository;
+import com.theoflu.Document.Management.user.repository.*;
 import com.theoflu.Document.Management.user.request.AddRoleReq;
 import com.theoflu.Document.Management.user.request.CreateTeamReq;
+import com.theoflu.Document.Management.user.request.UserFavRequest;
+import com.theoflu.Document.Management.user.response.FavResponse;
 import com.theoflu.Document.Management.user.response.PermCheckerResponse;
 import com.theoflu.Document.Management.user.response.statusProcesses;
 import com.theoflu.Document.Management.user.service.FileTextSearcher;
 import com.theoflu.Document.Management.user.service.UserService;
 import lombok.RequiredArgsConstructor;
-import org.apache.catalina.User;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -35,6 +33,8 @@ public class UserServiceImpl implements UserService {
     private  final TeamRepository teamRepository;
     private  final RoleRepository roleRepository;
     private  final FileTextSearcher fileTextSearcher;
+    private  final FavRepository favRepository;
+
     private final JwtUtils jwtUtils;
     @Override
     public UserEntity findUser(String username){
@@ -369,6 +369,74 @@ public class UserServiceImpl implements UserService {
 
         saveFile(existingFile);
     }
+    @Override
+    public FavResponse updateFavFile(String username, UserFavRequest userFavRequest) {
+        UserEntity user = findUser(username); // takipleyecek adam
+        FileEntity fav = findFile(userFavRequest.getFavFileName());
+        UserFavFileEntity favs = favRepository.findByUser(user);
+
+        if (favs.getFileEntities().contains(fav)) {
+            favs.getFileEntities().remove(fav);
+            favRepository.save(favs);
+            return new FavResponse("Yayıncı Takipten Çıkarıldı.");
+        } else {
+            favs.getFileEntities().add(fav);// favori listesine ekledim
+            favRepository.save(favs);
+            return new FavResponse("Yayıncı Takip Edildi.");
+
+        }
+    }
+    @Override
+  public List<FileEntity> userFavFiles(String token){
+        UserEntity user = findUser(extractUsernameFromToken(token)); // takipleyecek adam
+        UserFavFileEntity favs = favRepository.findByUser(user);
+        return favs.getFileEntities();
+    }
+    @Override
+    public File saveFileToTempDirectory(MultipartFile file) throws IOException {
+        Path tempDir = Files.createTempDirectory("");
+        File tempFile = new File(tempDir.toFile(), file.getOriginalFilename());
+        file.transferTo(tempFile);
+        return tempFile;
+    }
+    @Override
+    public String saveFileToUploadDirectory(File tempFile, String fileName) throws IOException {
+        String uploadDir = "uploads/";
+        File uploadDirectory = new File(uploadDir);
+
+        if (!uploadDirectory.exists()) {
+            uploadDirectory.mkdirs();  // Dizinleri oluştur
+        }
+
+        if (fileName == null || fileName.isEmpty()) {
+            fileName = tempFile.getName();  // Dosya adı sağlanmadıysa orijinal dosya adını kullan
+        }
+
+        String filePath = uploadDir + fileName;
+        File dest = new File(filePath);
+        Files.copy(tempFile.toPath(), dest.toPath());
+
+        return filePath;
+    }
+    @Override
+    public void saveFileEntity(String username, String fileName) {
+        UserEntity user = findUser(username);
+        TeamEntity team = findUserTeam(user);
+
+        FileEntity fileEntity = new FileEntity();
+        fileEntity.setFile(fileName);
+        fileEntity.set_Approved(false);
+        fileEntity.setReport("");
+        fileEntity.setSender(user);
+        fileEntity.setChecked_by_whom(getHighestRole(user).getName());
+        fileEntity.setReported_by_whom(getRol(getHighestRole(user).getId().intValue() - 1));
+        fileEntity.setUserEntity(List.of(user));
+        fileEntity.setTeam(List.of(team));
+
+        saveFile(fileEntity);
+    }
+
+
 
 
 

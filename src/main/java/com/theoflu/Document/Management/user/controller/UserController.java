@@ -3,13 +3,20 @@ package com.theoflu.Document.Management.user.controller;
 import com.theoflu.Document.Management.user.FileSigner.ApiReqs;
 import com.theoflu.Document.Management.user.configs.JwtUtils;
 import com.theoflu.Document.Management.user.entity.*;
+import com.theoflu.Document.Management.user.mail.MailService;
+import com.theoflu.Document.Management.user.mail.MailServiceImpl;
 import com.theoflu.Document.Management.user.request.*;
 import com.theoflu.Document.Management.user.response.PermCheckerResponse;
 import com.theoflu.Document.Management.user.service.UserService;
 
+import jakarta.mail.MessagingException;
 import lombok.RequiredArgsConstructor;
 import org.apache.catalina.User;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.UrlResource;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.*;
@@ -17,8 +24,10 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.File;
 import java.io.IOException;
+import java.net.MalformedURLException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -35,6 +44,7 @@ public class UserController {
     private  final UserService userService;
     private final JwtUtils jwtUtils;
     private final ApiReqs apiReqs;
+    private final MailService mailService;
     //TODO  onaylayanlarda tüm onaylaması gerekenler yoksa üsttekilere gitmesin
     //upload
     //download
@@ -42,7 +52,7 @@ public class UserController {
     //denied
     //checkfile
     //sign
-
+ /*
     @PostMapping("/upload")
     public ResponseEntity<String> uploadFile(@RequestHeader("Authorization") String token,
                                              @RequestParam("file") MultipartFile file,
@@ -92,7 +102,6 @@ public class UserController {
                 fileEntity.setChecked_by_whom(userService.getHighestRole(user).getName());
                 fileEntity.setReported_by_whom(userService.getRol(userService.getHighestRole(user).getId().intValue()-1));
                 fileEntity.setUserEntity(list);
-
                 fileEntity.setTeam(list1);
                 userService.saveFile(fileEntity);
 
@@ -162,8 +171,74 @@ public class UserController {
     }
 
 
-     */
+  */
+    @PostMapping("/upload")
+    public ResponseEntity<String> uploadFile(
+            @RequestHeader("Authorization") String token,
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "fileName", required = false) String fileName) {
 
+        String username = jwtUtils.getUserNameFromJwtToken(token.substring(6));
+        PermCheckerResponse permCheckerResponse = userService.PermChecker(username, ERolePerm.UPLOAD);
+
+        if (!permCheckerResponse.isVal()) {
+            return new ResponseEntity<>(permCheckerResponse.getMessage(), HttpStatus.FORBIDDEN);
+        }
+
+        if (file.isEmpty()) {
+            return new ResponseEntity<>("Dosya boş", HttpStatus.BAD_REQUEST);
+        }
+
+        try {
+            // Dosyayı geçici dizine kaydet
+            File tempFile = userService.saveFileToTempDirectory(file);
+
+            // Yükleme dizinini oluştur ve dosyayı kaydet
+            String finalFilePath = userService.saveFileToUploadDirectory(tempFile, fileName);
+
+            // Dosya ve kullanıcı bilgilerini veritabanına kaydet
+            userService.saveFileEntity(username, fileName);
+
+            return new ResponseEntity<>("Dosya başarıyla yüklendi: " + finalFilePath, HttpStatus.OK);
+        } catch (IOException e) {
+            return new ResponseEntity<>("Dosya yüklenirken bir hata oluştu: " + e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+
+
+    @PostMapping("/download")
+    public ResponseEntity<?> downloadFile(@RequestHeader("Authorization") String token,@RequestBody DownloadReq req) {
+        try {
+            String username = userService.extractUsernameFromToken(token);
+            FileEntity fileEntity = userService.findFile(req.getFilename());
+            PermCheckerResponse permCheckerResponse = userService.PermChecker(username, ERolePerm.ACCESS);
+            UserEntity user = userService.findUser(username);
+            // Dosyayı bul
+            // Dosya sisteminde dosyanın yolunu al
+            String filePath = "uploads/" + fileEntity.getFile();
+            Path path = Paths.get(filePath);
+            Resource resource = new UrlResource(path.toUri());
+            if (!permCheckerResponse.isVal()) {
+                return new ResponseEntity<>(permCheckerResponse.getMessage(), HttpStatus.FORBIDDEN);
+            }
+            if (!resource.exists()) {
+                return new ResponseEntity<>("Dosya bulunamadı", HttpStatus.NOT_FOUND);
+            }
+            if (!userService.isUserInFileTeam(fileEntity,user)) {
+                return new ResponseEntity<>("Bu takımda Değilsin", HttpStatus.FORBIDDEN);
+            }
+            return ResponseEntity.ok()
+                    .contentType(MediaType.parseMediaType(Files.probeContentType(path)))
+                    .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + fileEntity.getFile() + "\"")
+                    .body(resource);
+
+        } catch (MalformedURLException e) {
+            return new ResponseEntity<>("Dosya yolunda bir hata oluştu", HttpStatus.INTERNAL_SERVER_ERROR);
+        } catch (IOException e) {
+            return new ResponseEntity<>("Dosya indirilirken bir hata oluştu", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
     @PostMapping("/updateFile")
     public ResponseEntity<String> updateFile(@RequestHeader("Authorization") String token,
                                              @RequestParam("file") MultipartFile file,
@@ -212,10 +287,7 @@ public class UserController {
 
 
 
-    @PostMapping("/download")
-    public ResponseEntity<?> downloadFile(FileEntity fileEntity){
-        return  null;
-    }
+
     /*
     @PostMapping("/approve")
     public ResponseEntity<?> approveFile(@RequestHeader("Authorization") String token, @RequestBody ApproveReq req) {
@@ -413,7 +485,6 @@ public class UserController {
             return new ResponseEntity<>(result.getMessage(),HttpStatus.FORBIDDEN);
     }
     @PostMapping("/addPerm")
-
     ResponseEntity<?> addPerm(@RequestHeader("Authorization") String token, @RequestBody AddPermReq req){
         PermCheckerResponse result = userService.PermChecker(jwtUtils.getUserNameFromJwtToken(token.substring(6)),ERolePerm.EXECUTE);
         if(result.isVal()){
@@ -460,6 +531,47 @@ public class UserController {
        return  new ResponseEntity<>(" AHANDA BURADA : "+ userService.searchInFolder("uploads/",word,jwtUtils.getUserNameFromJwtToken(token.substring(6))),HttpStatus.OK);
 
     }
+
+    @PostMapping("/sendFileWithMail")
+    ResponseEntity<?> sendFileWithMail(@RequestHeader("Authorization") String token, @RequestBody SendMailReq req
+    ) throws MessagingException {
+        String username= userService.extractUsernameFromToken(token);
+        UserEntity user=userService.findUser(username);
+        req.setWhoSend(user.getEmail());
+        FileEntity file=userService.findFile(req.getFilename());
+        File send= new File("/uploads/"+file.getFile());
+        return new ResponseEntity<>(mailService.sendMultiMediaMail(send,req),HttpStatus.OK);
+    }
+    @PostMapping("/sendMail")
+    public ResponseEntity<?> sendMail(@RequestHeader("Authorization") String token, @RequestBody SendMailReq req) {
+        // Token'dan kullanıcı adını çıkar
+        String username = userService.extractUsernameFromToken(token);
+
+        // Kullanıcıyı bul
+        UserEntity user = userService.findUser(username);
+
+        // Gönderen kişinin e-posta adresini ayarla
+        req.setWhoSend(user.getEmail());
+
+        // Mail'i gönder ve yanıtı al
+        String response = mailService.sendMail(req.getSendTo(), req);
+
+        // Yanıtı dön
+        return new ResponseEntity<>(response, HttpStatus.OK);
+    }
+
+    @PostMapping("/favourite")
+    public ResponseEntity<?> favourite(@RequestHeader("Authorization") String token, @RequestBody UserFavRequest request) {
+        String username = jwtUtils.getUserNameFromJwtToken(token.substring(6));
+        return ResponseEntity.ok( userService.updateFavFile(username,request));
+    }
+
+    @GetMapping("/favfileslist")
+    public List<FileEntity> favfilesList(@RequestHeader("Authorization")String token){
+
+        return   userService.userFavFiles(token);
+    }
+
 
 
 

@@ -5,6 +5,8 @@ import com.theoflu.Document.Management.user.entity.*;
 import com.theoflu.Document.Management.user.repository.UserRepository;
 import com.theoflu.Document.Management.user.request.AddRoleReq;
 import com.theoflu.Document.Management.user.request.CreateTeamReq;
+import com.theoflu.Document.Management.user.request.UserFavRequest;
+import com.theoflu.Document.Management.user.response.FavResponse;
 import com.theoflu.Document.Management.user.response.PermCheckerResponse;
 import com.theoflu.Document.Management.user.response.statusProcesses;
 import org.springframework.http.ResponseEntity;
@@ -28,6 +30,9 @@ public interface UserService {
      String getNextLowerRoleName(ERole currentRole);
      String approveChecker(int eroleNo, String filename);
      PermCheckerResponse PermChecker(String username, ERolePerm Perm);
+
+
+
 
      statusProcesses createTeam(CreateTeamReq createTeamReq);
 
@@ -60,4 +65,19 @@ public interface UserService {
       void deleteOldFile(String fileName);
      void saveNewFile(File tempFile, String fileName) throws IOException;
      void updateFileEntity(FileEntity existingFile, UserEntity user, String fileName);
+
+     FavResponse updateFavFile(String username, UserFavRequest userFavRequest);
+
+     List<FileEntity> userFavFiles(String token);
+
+
+
+
+
+     File saveFileToTempDirectory(MultipartFile file) throws IOException ;
+
+      String saveFileToUploadDirectory(File tempFile, String fileName) throws IOException ;
+      void saveFileEntity(String username, String fileName);
+
+
 }
