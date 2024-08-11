@@ -1,11 +1,13 @@
 package com.theoflu.Document.Management.user.service.impl;
 
 
+import com.theoflu.Document.Management.user.configs.JwtUtils;
 import com.theoflu.Document.Management.user.entity.*;
 import com.theoflu.Document.Management.user.repository.FileRepository;
 import com.theoflu.Document.Management.user.repository.RoleRepository;
 import com.theoflu.Document.Management.user.repository.TeamRepository;
 import com.theoflu.Document.Management.user.repository.UserRepository;
+import com.theoflu.Document.Management.user.request.AddRoleReq;
 import com.theoflu.Document.Management.user.request.CreateTeamReq;
 import com.theoflu.Document.Management.user.response.PermCheckerResponse;
 import com.theoflu.Document.Management.user.response.statusProcesses;
@@ -13,8 +15,14 @@ import com.theoflu.Document.Management.user.service.FileTextSearcher;
 import com.theoflu.Document.Management.user.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.apache.catalina.User;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -27,6 +35,7 @@ public class UserServiceImpl implements UserService {
     private  final TeamRepository teamRepository;
     private  final RoleRepository roleRepository;
     private  final FileTextSearcher fileTextSearcher;
+    private final JwtUtils jwtUtils;
     @Override
     public UserEntity findUser(String username){
         return userepo.findUserEntityByUsername(username);
@@ -174,6 +183,191 @@ public class UserServiceImpl implements UserService {
 
         //TODO gelen dosyalara kullanıcının erişimi var mı?
         return  iznli;
+    }
+    @Override
+    public statusProcesses rolePermEkle(int roleId, String permName) {
+        try {
+            ERole erole = getRol(roleId);
+            ERolePerm newPerm = ERolePerm.valueOf(permName);
+            Role role= roleRepository.findByName(erole).orElseThrow(() -> new RuntimeException("Role not found with ID: " + roleId));;
+            role.getPerms().add(newPerm);
+            roleRepository.save(role);
+            return new statusProcesses("Perm Başarı ile Eklendi");
+        }
+        catch (Exception e){
+            return new statusProcesses("Eklenirken Hata Oluştu : "+e.getMessage());
+        }
+
+    }
+    @Override
+    public statusProcesses rolePermCikar(int roleId, String permName) {
+        try {
+            ERole erole = getRol(roleId);
+            ERolePerm newPerm = ERolePerm.valueOf(permName);
+            Role role= roleRepository.findByName(erole).orElseThrow(() -> new RuntimeException("Role not found with ID: " + roleId));;
+            role.getPerms().remove(newPerm);
+            roleRepository.save(role);
+            return new statusProcesses("Perm Başarı ile Silindi");
+        }
+        catch (Exception e){
+            return new statusProcesses("Eklenirken Hata Oluştu : "+e.getMessage());
+        }
+
+    }
+    @Override
+    public statusProcesses addRole(AddRoleReq addRoleReq) {
+        try{
+            UserEntity user = findUser(addRoleReq.getUsername());
+            ERole newRoleEnum = getRol(addRoleReq.getRoleId());
+            Role newRole = roleRepository.findByName(newRoleEnum)
+                    .orElseThrow(() -> new IllegalArgumentException("Id bulunamadı: " + addRoleReq.getRoleId()));
+            if (user.getRoles().contains(newRole)) {
+                throw new IllegalStateException("Zaten bu role sahip: " + newRoleEnum);
+            }
+            user.getRoles().add(newRole);
+            userepo.save(user);
+            return new statusProcesses("Başarı ile gerçekleşti");
+        }
+        catch (Exception e){
+            return new statusProcesses("Başarı ile gerçekleşmedi : " + e.getMessage());
+        }
+
+    }
+
+    @Override
+    public statusProcesses delRole(AddRoleReq addRoleReq) {
+        try{
+            UserEntity user = findUser(addRoleReq.getUsername());
+            ERole newRoleEnum = getRol(addRoleReq.getRoleId());
+            Role newRole = roleRepository.findByName(newRoleEnum)
+                    .orElseThrow(() -> new IllegalArgumentException("Id bulunamadı: " + addRoleReq.getRoleId()));
+            if (user.getRoles().contains(newRole)) {
+                user.getRoles().remove(newRole);
+                userepo.save(user);
+                return new statusProcesses("Başarı ile gerçekleşti");
+            }
+            else
+                return new statusProcesses("Kullanıcı Böyle bir Role Sahip değil");
+        }
+        catch (Exception e){
+            return new statusProcesses("Başarı ile gerçekleşmedi : " + e.getMessage());
+        }
+
+    }
+
+    @Override
+    public boolean hasUserAlreadyApproved(FileEntity file, UserEntity user) {
+        return file.getUserEntity().contains(user);
+    }
+    @Override
+    public boolean canUserApproveFile(FileEntity file, Role highestRole) {
+        return file.getChecked_by_whom().ordinal() >= highestRole.getName().ordinal();
+    }
+    @Override
+    public ResponseEntity<String> approveFileAndRespond(FileEntity file, UserEntity user, Role highestRole) {
+        String approvalCheck = approveChecker(file.getChecked_by_whom().ordinal(), file.getFile());
+
+        if (!approvalCheck.equals("110") && file.getChecked_by_whom().ordinal() - 1 == highestRole.getId() - 1) {
+            file.setChecked_by_whom(highestRole.getName());
+
+            if (highestRole.getId() == 1) {
+                file.set_Approved(true);
+            }
+
+            file.getUserEntity().add(user);
+            file.setReport("");
+            saveFile(file);
+
+            return ResponseEntity.ok(highestRole.getName() + " herkes onayladı.");
+        } else if (file.getChecked_by_whom().ordinal() == highestRole.getId() - 1) {
+            file.setReport("");
+            file.getUserEntity().add(user);
+            saveFile(file);
+
+            return ResponseEntity.ok("İstek başarılı şekilde gerçekleşti.");
+        }
+
+        return ResponseEntity.ok("Sizden önce onaylaması gerekenler var.");
+    }
+
+
+
+    @Override
+    public String extractUsernameFromToken(String token) {
+        return jwtUtils.getUserNameFromJwtToken(token.substring(6));
+    }
+    @Override
+    public boolean hasApprovers(FileEntity file) {
+        return file.getUserEntity().size() > 0;
+    }
+    @Override
+    public void removeLastApprover(FileEntity file) {
+        List<UserEntity> approvers = file.getUserEntity();
+        approvers.remove(approvers.size() - 1);
+        file.setUserEntity(approvers);
+    }
+    @Override
+    public boolean isUserInTeam(FileEntity file, UserEntity user) {
+        List<UserEntity> users = file.getTeam().get(0).getUserEntities();
+        return users.contains(user);
+    }
+    @Override
+    public boolean canUserReportFile(FileEntity file, Role highestRole) {
+        return file.getReported_by_whom().ordinal() >= highestRole.getName().ordinal() &&
+                file.getReported_by_whom().ordinal() == highestRole.getId();
+    }
+    @Override
+    public void reportFile(FileEntity file, UserEntity user, String reportMessage) {
+        Role userRole = getHighestRole(user);
+        file.setReport(reportMessage);
+        file.setReported_by_whom(getRol(userRole.getId().intValue()));
+        file.setChecked_by_whom(getRol(userRole.getId().intValue()));
+        saveFile(file);
+    }
+
+    @Override
+    public boolean isUserInFileTeam(FileEntity file, UserEntity user) {
+        List<UserEntity> userEntities = file.getTeam().get(0).getUserEntities();
+        return userEntities.contains(user);
+    }
+
+    @Override
+    public void updateExistingFile(FileEntity existingFile, MultipartFile file, UserEntity user, String fileName) throws IOException {
+        Path tempDir = Files.createTempDirectory("");
+        File tempFile = new File(tempDir.toFile(), file.getOriginalFilename());
+        file.transferTo(tempFile);
+
+        deleteOldFile(fileName);
+
+        saveNewFile(tempFile, fileName);
+
+        updateFileEntity(existingFile, user, fileName);
+    }
+    @Override
+    public void deleteOldFile(String fileName) {
+        File oldFile = new File("uploads/" + fileName);
+        if (oldFile.exists()) {
+            oldFile.delete();
+        }
+    }
+    @Override
+    public void saveNewFile(File tempFile, String fileName) throws IOException {
+        String uploadDir = "uploads/";
+        File dest = new File(uploadDir + fileName);
+        Files.copy(tempFile.toPath(), dest.toPath());
+    }
+    @Override
+    public void updateFileEntity(FileEntity existingFile, UserEntity user, String fileName) {
+        existingFile.setFile(fileName);
+        existingFile.set_Approved(false);
+        existingFile.setReport("");
+        existingFile.setReported_by_whom(getRol(getHighestRole(user).getId().intValue() - 1));
+
+        List<UserEntity> users = existingFile.getUserEntity();
+        users.add(user);
+        existingFile.setUserEntity(users);
+
+        saveFile(existingFile);
     }
 
 
